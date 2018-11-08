@@ -133,5 +133,7 @@ void setBitAtomic(struct Bitmap* bitmap, __u32 pos){
 #elif CRITICAL_SECTION == ATOMIC
 #pragma omp atomic
 	bitmap->bitarray[word_offset(pos)] |= (__u32) (1 << bit_offset(pos));
+#else //GCC
+	__sync_or_and_fetch(&bitmap->bitarray[word_offset(pos)], (__u32) (1 << bit_offset(pos)));
 #endif
 }

@@ -187,7 +187,6 @@ void flushArrayQueueToShared(struct ArrayQueue *local_q, struct ArrayQueue *shar
 void flushArrayQueueToShared(struct ArrayQueue *local_q, struct ArrayQueue *shared_q){
 #endif
 
-
 #if CRITICAL_SECTION == LOCK
 	omp_set_lock(&flush_lock);
 #elif CRITICAL_SECTION == CRITICAL
@@ -196,22 +195,23 @@ void flushArrayQueueToShared(struct ArrayQueue *local_q, struct ArrayQueue *shar
 #endif	
 	// __u32 shared_q_tail_next = shared_q->tail_next; //every thread starts from its own starting point on
 	// shared_q->tail_next += local_q->tail;
+#if CRITICAL_SECTION == GCC	
 	__u32 shared_q_tail_next = __sync_fetch_and_add(&shared_q->tail_next, local_q->tail);
+#else
+	__u32 shared_q_tail_next = shared_q->tail_next; //every thread starts from its own starting point on
+	shared_q->tail_next += local_q->tail;
+#endif
+	__u32 local_q_size = local_q->tail - local_q->head;
+	//reset the local queue state the ruse purpose is alloc/dealoc local queus create overhead.
+	memcpy(&shared_q->queue[shared_q_tail_next],&local_q->queue[local_q->head],local_q_size*(sizeof(__u32)));
 #if CRITICAL_SECTION == LOCK
     omp_unset_lock(&flush_lock);
 #elif CRITICAL_SECTION == CRITICAL
 }
 #endif
-	__u32 local_q_size = local_q->tail - local_q->head;
-
-	//reset the local queue state the ruse purpose is alloc/dealoc local queus create overhead.
-
-	memcpy(&shared_q->queue[shared_q_tail_next],&local_q->queue[local_q->head],local_q_size*(sizeof(__u32)));
-
 	local_q->head = 0;
     local_q->tail = 0;
     local_q->tail_next = 0;
-
 }
 
 

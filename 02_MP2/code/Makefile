@@ -80,7 +80,7 @@ test: app edgelist sort vertex timer bfs graph bitmap arrayQueue
 			$(CFLAGS)
 
 n=2
-p=1
+p=0
 # r=3009230
 f=./datasets/RMAT/RMAT18
 r=1

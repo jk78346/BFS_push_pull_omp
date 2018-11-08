@@ -13,7 +13,7 @@
 #include "omp.h"
 
 enum CRITICAL_SECTION_OPTIONS{ ATOMIC, GCC, LOCK, CRITICAL };
-enum CRITICAL_SECTION_OPTIONS CRITICAL_SECTION = GCC;
+enum CRITICAL_SECTION_OPTIONS CRITICAL_SECTION = LOCK;
 enum QUEUEINGS{LOCAL, SHARE};
 enum QUEUEINGS QUEUEING = LOCAL;
 // breadth-first-search(graph, source)
@@ -144,7 +144,7 @@ int topDownStepGraphCSR(struct Graph* graph, struct ArrayQueue* sharedFrontierQu
     //in BFS you can process each frontier in parallel and generate a local next frontier
     //a good trick is to do a compare and swap operation and then use that to enqueue your element to the next frontier
     //or do an atomic enqueue either way should give you different performances. 
-
+#pragma omp for
     for(i = sharedFrontierQueue->head ; i < sharedFrontierQueue->tail; i++){
         v = sharedFrontierQueue->queue[i];
         edge_idx = graph->vertices[v].edges_idx;
@@ -305,8 +305,7 @@ int bottomUpStepGraphCSR(struct Graph* graph, struct Bitmap* bitmapCurr, struct 
     omp_lock_t lock;
     omp_init_lock(&lock);
 #endif
-#pragma omp parallel private(v, out_degree, edge_idx, j, u) reduction( + : nf)
-{
+#pragma omp parallel for private(v, out_degree, edge_idx, j, u) reduction( + : nf)
     for(v=0 ; v < graph->num_vertices ; v++){
         out_degree = graph->inverse_vertices[v].out_degree;
         if(graph->parents[v] < 0){ 
@@ -322,7 +321,7 @@ int bottomUpStepGraphCSR(struct Graph* graph, struct Bitmap* bitmapCurr, struct 
             }
         }
     }
-}
+
 #if CRITICAL_SECTION == LOCK
     omp_destroy_lock(&lock);
 #endif
