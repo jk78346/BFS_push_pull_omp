@@ -13,7 +13,7 @@
 #include "omp.h"
 
 enum CRITICAL_SECTION_OPTIONS{ ATOMIC, GCC, LOCK, CRITICAL };
-enum CRITICAL_SECTION_OPTIONS CRITICAL_SECTION = LOCK;
+enum CRITICAL_SECTION_OPTIONS CRITICAL_SECTION = ATOMIC;  //no ATOMIC, SHARE in push
 enum QUEUEINGS{LOCAL, SHARE};
 enum QUEUEINGS QUEUEING = LOCAL;
 // breadth-first-search(graph, source)
@@ -135,7 +135,7 @@ int topDownStepGraphCSR(struct Graph* graph, struct ArrayQueue* sharedFrontierQu
     omp_lock_t share_lock;
     omp_init_lock(&share_lock);
 #endif
-#pragma omp parallel private(v, i, j, edge_idx, u)
+#pragma omp parallel private(v, i, j, edge_idx, u) reduction( + : mf)
 {
     int tid = omp_get_thread_num();
     struct ArrayQueue* localFrontierQueue = localFrontierQueues[tid];
@@ -156,7 +156,11 @@ int topDownStepGraphCSR(struct Graph* graph, struct ArrayQueue* sharedFrontierQu
 #if QUEUEING == LOCAL
                 enArrayQueue(localFrontierQueue, u); // instead of using local queues try using one shared atomic queue
 #elif QUEUEING == SHARE
+#if CRITICAL_SECTION == LOCK
                 enArrayQueueAtomic(sharedFrontierQueue, u, sharelock);
+#else
+                enArrayQueueAtomic(sharedFrontierQueue, u);
+#endif
 #endif
                 mf++;
             }

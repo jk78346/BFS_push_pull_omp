@@ -221,18 +221,25 @@ void flushArrayQueueToShared(struct ArrayQueue *local_q, struct ArrayQueue *shar
 you need to implement this if needed
 
 */
+#if CRITICAL_SECTION == LOCK
 void enArrayQueueAtomic(struct ArrayQueue *q, __u32 k, omp_lock_t lock){
+#else
+void enArrayQueueAtomic(struct ArrayQueue *q, __u32 k){
+#endif
 #if CRITICAL_SECTION == CRITICAL
 #pragma omp critical
 {
 #elif CRITICAL_SECTION == LOCK
 	omp_set_lock(&lock);
 #endif
-	// q->queue[q->tail] = k;
-	// q->tail = (q->tail+1)%q->size;
-	// q->tail_next = q->tail;
-	q->queue[__sync_fetch_and_add(&q->tail, 1)] = k;
+
+#if CRITICAL_SECTION == GCC
+	q->queue[__sync_fetch_and_add(&q->tail_next, 1)] = k;
+#else	
+	q->queue[q->tail] = k;
+	q->tail = (q->tail+1)%q->size;
 	q->tail_next = q->tail;
+#endif
 #if CRITICAL_SECTION == CRITICAL
 }
 #elif CRITICAL_SECTION == LOCK

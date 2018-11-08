@@ -23,7 +23,11 @@ void resetArrayQueue(struct ArrayQueue *q);
 
 void enArrayQueue 					(struct ArrayQueue *q, __u32 k);
 void enArrayQueueWithBitmap 		(struct ArrayQueue *q, __u32 k);
+#if CRITICAL_SECTION == LOCK
 void enArrayQueueAtomic 			(struct ArrayQueue *q, __u32 k, omp_lock_t lock);
+#else
+void enArrayQueueAtomic 			(struct ArrayQueue *q, __u32 k);
+#endif
 void enArrayQueueWithBitmapAtomic 	(struct ArrayQueue *q, __u32 k);
 
 
