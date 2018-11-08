@@ -79,13 +79,14 @@ test: app edgelist sort vertex timer bfs graph bitmap arrayQueue
 		 -o $(APP_DIR)/$(BIN_DIR)/$(APP)			\
 			$(CFLAGS)
 
-n=1
-p=0
+n=2
+p=1
 # r=3009230
-# f=./datasets/RMAT/RMAT22
-r=6
-f=./datasets/test/test.txt
-
+f=./datasets/RMAT/RMAT18
+r=1
+#f=./datasets/test/test.txt
+#f=./datasets/facebook/facebook_combined.txt
+#f=./datasets/wiki-vote/wiki-Vote.txt
 
 run: test
 	$(APP_DIR)/$(BIN_DIR)/$(APP) -f $(f) -n $(n) -p $(p) -r $(r) -h

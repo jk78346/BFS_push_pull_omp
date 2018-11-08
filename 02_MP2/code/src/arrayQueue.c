@@ -181,16 +181,32 @@ __u32 sizeArrayQueue(struct ArrayQueue *q){
 	Flush only works for single thread make sure is multi threaded safe
 
 */
-
+#if CRITICAL_SECTION == LOCK
+void flushArrayQueueToShared(struct ArrayQueue *local_q, struct ArrayQueue *shared_q, omp_lock_t flush_lock){
+#else
 void flushArrayQueueToShared(struct ArrayQueue *local_q, struct ArrayQueue *shared_q){
+#endif
 
-__u32 shared_q_tail_next = shared_q->tail_next;
-	shared_q->tail_next += local_q->tail;
-__u32 local_q_size = local_q->tail - local_q->head;
 
-//reset the local queue state the ruse purpose is alloc/dealoc local queus create overhead.
+#if CRITICAL_SECTION == LOCK
+	omp_set_lock(&flush_lock);
+#elif CRITICAL_SECTION == CRITICAL
+#pragma omp critical
+{
+#endif	
+	// __u32 shared_q_tail_next = shared_q->tail_next; //every thread starts from its own starting point on
+	// shared_q->tail_next += local_q->tail;
+	__u32 shared_q_tail_next = __sync_fetch_and_add(&shared_q->tail_next, local_q->tail);
+#if CRITICAL_SECTION == LOCK
+    omp_unset_lock(&flush_lock);
+#elif CRITICAL_SECTION == CRITICAL
+}
+#endif
+	__u32 local_q_size = local_q->tail - local_q->head;
 
-memcpy(&shared_q->queue[shared_q_tail_next],&local_q->queue[local_q->head],local_q_size*(sizeof(__u32)));
+	//reset the local queue state the ruse purpose is alloc/dealoc local queus create overhead.
+
+	memcpy(&shared_q->queue[shared_q_tail_next],&local_q->queue[local_q->head],local_q_size*(sizeof(__u32)));
 
 	local_q->head = 0;
     local_q->tail = 0;
@@ -199,19 +215,29 @@ memcpy(&shared_q->queue[shared_q_tail_next],&local_q->queue[local_q->head],local
 }
 
 
+
 /*
 
 you need to implement this if needed
 
 */
-void enArrayQueueAtomic (struct ArrayQueue *q, __u32 k){
-
-/*
-
-	atomic operation
-
-*/
-	
+void enArrayQueueAtomic(struct ArrayQueue *q, __u32 k, omp_lock_t lock){
+#if CRITICAL_SECTION == CRITICAL
+#pragma omp critical
+{
+#elif CRITICAL_SECTION == LOCK
+	omp_set_lock(&lock);
+#endif
+	// q->queue[q->tail] = k;
+	// q->tail = (q->tail+1)%q->size;
+	// q->tail_next = q->tail;
+	q->queue[__sync_fetch_and_add(&q->tail, 1)] = k;
+	q->tail_next = q->tail;
+#if CRITICAL_SECTION == CRITICAL
+}
+#elif CRITICAL_SECTION == LOCK
+	omp_unset_lock(&lock);
+#endif
 }
 
 

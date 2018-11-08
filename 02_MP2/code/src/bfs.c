@@ -10,9 +10,12 @@
 #include "arrayQueue.h"
 #include "bitmap.h"
 #include "timer.h"
+#include "omp.h"
 
-
-
+enum CRITICAL_SECTION_OPTIONS{ ATOMIC, GCC, LOCK, CRITICAL };
+enum CRITICAL_SECTION_OPTIONS CRITICAL_SECTION = GCC;
+enum QUEUEINGS{LOCAL, SHARE};
+enum QUEUEINGS QUEUEING = LOCAL;
 // breadth-first-search(graph, source)
 //  sharedFrontierQueue ← {source}
 //  next ← {}
@@ -124,42 +127,59 @@ int topDownStepGraphCSR(struct Graph* graph, struct ArrayQueue* sharedFrontierQu
 
         //create a parallel region here
         // then use a local queue for each thread id
-        struct ArrayQueue* localFrontierQueue = localFrontierQueues[0];
-        
+#if CRITICAL_SECTION == LOCK
+    omp_lock_t flush_lock;
+    omp_init_lock(&flush_lock);
+#endif
+#if QUEUEING == SHARE
+    omp_lock_t share_lock;
+    omp_init_lock(&share_lock);
+#endif
+#pragma omp parallel private(v, i, j, edge_idx, u)
+{
+    int tid = omp_get_thread_num();
+    struct ArrayQueue* localFrontierQueue = localFrontierQueues[tid];
 
-        //parallelize this loop using pargma for notice the conflicts and the enqueue bottleneck
-        //in BFS you can process each frontier in parallel and generate a local next frontier
-        //a good trick is to do a compare and swap operation and then use that to enqueue your element to the next frontier
-        //or do an atomic enqueue either way should give you different performances. 
-        for(i = sharedFrontierQueue->head ; i < sharedFrontierQueue->tail; i++){
-            v = sharedFrontierQueue->queue[i];
-            edge_idx = graph->vertices[v].edges_idx;
-            for(j = edge_idx ; j < (edge_idx + graph->vertices[v].out_degree) ; j++){
-                u = graph->sorted_edges_array[j].dest;
-                int u_parent = graph->parents[u]; 
-                if(u_parent < 0 ){
-                    graph->parents[u] = v; // this operation need to be atomic 
-                    enArrayQueue(localFrontierQueue, u); // instead of using local queues try using one shared atomic queue
-                    mf++;
-                }
+    //parallelize this loop using pargma for notice the conflicts and the enqueue bottleneck
+    //in BFS you can process each frontier in parallel and generate a local next frontier
+    //a good trick is to do a compare and swap operation and then use that to enqueue your element to the next frontier
+    //or do an atomic enqueue either way should give you different performances. 
+
+    for(i = sharedFrontierQueue->head ; i < sharedFrontierQueue->tail; i++){
+        v = sharedFrontierQueue->queue[i];
+        edge_idx = graph->vertices[v].edges_idx;
+        for(j = edge_idx ; j < (edge_idx + graph->vertices[v].out_degree) ; j++){
+            u = graph->sorted_edges_array[j].dest;
+            // bool __sync_bool_compare_and_swap(type *ptr, type oldval, type newval, ...)
+            // type __sync_val_comapre_and_swap(type *ptr, type oldval, type newval, ...)
+            if(__sync_bool_compare_and_swap(&graph->parents[u], -1, v) == 1){
+#if QUEUEING == LOCAL
+                enArrayQueue(localFrontierQueue, u); // instead of using local queues try using one shared atomic queue
+#elif QUEUEING == SHARE
+                enArrayQueueAtomic(sharedFrontierQueue, u, sharelock);
+#endif
+                mf++;
             }
-
-        } 
-
-
-        // use the arrayQueueflush function to flush local frontiers into on shared frontier here
-         //you need to make it work for parallel threads
-        flushArrayQueueToShared(localFrontierQueue,sharedFrontierQueue);
-
-
+        }
+    }
+    // use the arrayQueueflush function to flush local frontiers into on shared frontier here
+     //you need to make it work for parallel threads
+#if QUEUEING == LOCAL    
+#if CRITICAL_SECTION == LOCK
+    flushArrayQueueToShared(localFrontierQueue,sharedFrontierQueue, flush_lock);
+#else
+    flushArrayQueueToShared(localFrontierQueue,sharedFrontierQueue);
+#endif
+#endif
+#pragma omp barrier
+} // end pragma omp parallel
         // end parallel region
-
-       
-
-
-
-
-    
+#if CRITICAL_SECTION == LOCK
+    omp_destroy_lock(&flush_lock);
+#endif 
+#if QUEUEING == SHARE
+    omp_destroy_lock(&share_lock);
+#endif
     return mf;
 }
 
@@ -274,29 +294,37 @@ int bottomUpStepGraphCSR(struct Graph* graph, struct Bitmap* bitmapCurr, struct 
     
     int nf = 0; // number of vertices in next frontier
    
+    // reduction(+:nf)
 
     // you need to insert a pragma here parallelize this loop
     // we are collecting statistics here especially nf variable means number of set bits in the next frontier use reduction for it
     // make sure you set shared and private variables correctly
     // The set bit needs to be atomic operation
     // since each v is updating its own parent you will notices no need for locks.
-
+#if CRITICAL_SECTION == LOCK
+    omp_lock_t lock;
+    omp_init_lock(&lock);
+#endif
+#pragma omp parallel private(v, out_degree, edge_idx, j, u) reduction( + : nf)
+{
     for(v=0 ; v < graph->num_vertices ; v++){
-                out_degree = graph->inverse_vertices[v].out_degree;
-                if(graph->parents[v] < 0){ 
-                    edge_idx = graph->inverse_vertices[v].edges_idx;
-
-                    for(j = edge_idx ; j < (edge_idx + out_degree) ; j++){
-                         u = graph->inverse_sorted_edges_array[j].dest;
-                         if(getBit(bitmapCurr, u)){
-                            graph->parents[v] = u;
-                            setBit(bitmapNext, v);
-                            nf++;
-                            break;
-                         }
-                    }
+        out_degree = graph->inverse_vertices[v].out_degree;
+        if(graph->parents[v] < 0){ 
+            edge_idx = graph->inverse_vertices[v].edges_idx;
+            for(j = edge_idx ; j < (edge_idx + out_degree) ; j++){               
+                u = graph->inverse_sorted_edges_array[j].dest;
+                if(getBit(bitmapCurr, u)){
+                    graph->parents[v] = u;
+                    setBitAtomic(bitmapNext, v, lock);
+                    nf++;
+                    break;
                 }
-        
+            }
+        }
     }
+}
+#if CRITICAL_SECTION == LOCK
+    omp_destroy_lock(&lock);
+#endif
     return nf;
 }

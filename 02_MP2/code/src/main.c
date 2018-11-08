@@ -37,7 +37,6 @@ static void usage(void) {
 
 int main(int argc, char **argv) {
 
- 
   char *fvalue = NULL;
   char *rvalue = NULL;
   char *nvalue = NULL;

@@ -23,7 +23,7 @@ void resetArrayQueue(struct ArrayQueue *q);
 
 void enArrayQueue 					(struct ArrayQueue *q, __u32 k);
 void enArrayQueueWithBitmap 		(struct ArrayQueue *q, __u32 k);
-void enArrayQueueAtomic 			(struct ArrayQueue *q, __u32 k);
+void enArrayQueueAtomic 			(struct ArrayQueue *q, __u32 k, omp_lock_t lock);
 void enArrayQueueWithBitmapAtomic 	(struct ArrayQueue *q, __u32 k);
 
 
@@ -49,7 +49,11 @@ __u32 sizeArrayQueue(struct ArrayQueue *q);
 __u8  isEnArrayQueuedNext 	(struct ArrayQueue *q, __u32 k);
 
 void arrayQueueGenerateBitmap(struct ArrayQueue *q);
+#if CRITICAL_SECTION == LOCK
+void flushArrayQueueToShared(struct ArrayQueue *local_q, struct ArrayQueue *shared_q, omp_lock_t flush_lock);
+#else
 void flushArrayQueueToShared(struct ArrayQueue *local_q, struct ArrayQueue *shared_q);
+#endif
 void arrayQueueToBitmap(struct ArrayQueue *q, struct Bitmap* b);
 void bitmapToArrayQueue(struct Bitmap* b, struct ArrayQueue *q, struct ArrayQueue** localFrontierQueues);
 

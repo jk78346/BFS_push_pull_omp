@@ -2,6 +2,7 @@
 #define BITMAP_H
 
 #include <linux/types.h>
+#include <omp.h>
 
 #define kBitsPerWord  32
 #define word_offset(n)  (n / kBitsPerWord)
@@ -27,7 +28,11 @@ struct Bitmap* newBitmap( __u32 size);
 void clearBitmap(struct Bitmap* bitmap);
 void setBit(struct Bitmap* bitmap, __u32 pos);
 void setBitRange(struct Bitmap* bitmap, __u32 start,__u32 end);
-void setBitAtomic(struct Bitmap* bitmap, __u32 pos);
+#if CRITICAL_SECTION == LOCK
+	void setBitAtomic(struct Bitmap* bitmap, __u32 pos, omp_lock_t lock);
+#else
+	void setBitAtomic(struct Bitmap* bitmap, __u32 pos);
+#endif
 __u32 getBit(struct Bitmap* bitmap, __u32 pos);
 void clearBit(struct Bitmap* bitmap, __u32 pos);
 void freeBitmap( struct Bitmap* bitmap);

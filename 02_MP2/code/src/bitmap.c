@@ -113,10 +113,25 @@ void printSetBits (struct Bitmap* bitmap){
 /***********************************
 you need to implement this function
 ***********************************/
+#if CRITICAL_SECTION == LOCK
+void setBitAtomic(struct Bitmap* bitmap, __u32 pos, omp_lock_t lock){
+#else
 void setBitAtomic(struct Bitmap* bitmap, __u32 pos){
-
+#endif
 /*
 	atomic operatoin here
 */
-	
+#if CRITICAL_SECTION == CRITICAL
+#pragma omp critical
+{
+	bitmap->bitarray[word_offset(pos)] |= (__u32) (1 << bit_offset(pos));
+}
+#elif CRITICAL_SECTION == LOCK
+    omp_set_lock(&lock);
+    bitmap->bitarray[word_offset(pos)] |= (__u32) (1 << bit_offset(pos));
+    omp_unset_lock(&lock);
+#elif CRITICAL_SECTION == ATOMIC
+#pragma omp atomic
+	bitmap->bitarray[word_offset(pos)] |= (__u32) (1 << bit_offset(pos));
+#endif
 }
